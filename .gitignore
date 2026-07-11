@@ -1,2 +1,22 @@
-.csv
-.json
+Virtual Environments
+
+venv/
+env/
+.venv/
+
+Streamlit specific files
+
+.streamlit/
+
+Python cache files
+
+pycache/
+*.pyc
+
+IDE files (like VS Code)
+
+.vscode/
+
+Datasets (Optional, but recommended if the file is very large)
+
+superstore.csv
