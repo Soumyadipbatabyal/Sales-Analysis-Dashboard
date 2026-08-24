@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import os
 
 # 1. Page Configuration
@@ -103,7 +104,6 @@ if df is not None:
     with col1:
         if "Sales" in filtered_df.columns:
             total_sales = filtered_df["Sales"].sum()
-            # Added delta parameter here
             st.metric(label="Total Sales", value=f"${total_sales:,.2f}", delta=sales_delta)
         else:
             st.warning("⚠️ 'Sales' column missing.")
@@ -111,19 +111,16 @@ if df is not None:
     with col2:
         if "Customer ID" in filtered_df.columns:
             total_customers = filtered_df["Customer ID"].nunique()
-            # Added delta parameter here
             st.metric(label="Unique Customers", value=f"{total_customers:,}", delta=cust_delta)
         else:
             st.warning("⚠️ 'Customer ID' missing.")
             
     with col3:
-        # Added delta parameter here
         st.metric(label="Total Orders", value=f"{total_orders:,}", delta=orders_delta)
 
     with col4:
         if "Sales" in filtered_df.columns and total_orders > 0:
             aov = filtered_df["Sales"].sum() / total_orders
-            # Added delta parameter here
             st.metric(label="Average Order Value", value=f"${aov:,.2f}", delta=aov_delta)
         else:
             st.warning("⚠️ Cannot calculate AOV.")
@@ -142,7 +139,6 @@ if df is not None:
                 monthly_sales = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M'))['Sales'].sum().reset_index()
                 monthly_sales['Order Date'] = monthly_sales['Order Date'].dt.to_timestamp()
                 fig_trend = px.line(monthly_sales, x='Order Date', y='Sales')
-                # Updated to modern width parameter
                 st.plotly_chart(fig_trend, key="trend_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Order Date' and/or 'Sales' columns.")
@@ -150,18 +146,68 @@ if df is not None:
         with chart_col2:
             st.subheader("Sales by Sub-Category")
             if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
-                # Sorted ascending and flipped to horizontal bar chart
                 subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=True)
                 fig_subcat = px.bar(subcategory_sales, x='Sales', y='Sub-Category', orientation='h')
                 st.plotly_chart(fig_subcat, key="subcat_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
+        # --- NEW PARETO CHART ---
+        st.divider()
+        st.subheader("Pareto Analysis: Sales by Sub-Category")
+        st.markdown("Visualizing which products drive 80% of total revenue.")
+        
+        if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
+            # Calculate descending sales and cumulative percentage
+            pareto_df = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=False)
+            pareto_df["Cumulative %"] = (pareto_df["Sales"].cumsum() / pareto_df["Sales"].sum()) * 100
+            
+            # Build the dual-axis chart
+            fig_pareto = go.Figure()
+            
+            # Bar chart for raw sales
+            fig_pareto.add_trace(go.Bar(
+                x=pareto_df['Sub-Category'],
+                y=pareto_df['Sales'],
+                name='Sales',
+                marker_color='#3366CC'
+            ))
+            
+            # Line chart for cumulative percentage
+            fig_pareto.add_trace(go.Scatter(
+                x=pareto_df['Sub-Category'],
+                y=pareto_df['Cumulative %'],
+                name='Cumulative %',
+                mode='lines+markers',
+                yaxis='y2',
+                line=dict(color='#FF9900', width=3)
+            ))
+            
+            # Format the dual-axis layout
+            fig_pareto.update_layout(
+                yaxis=dict(title='Sales ($)'),
+                yaxis2=dict(
+                    title='Cumulative %',
+                    overlaying='y',
+                    side='right',
+                    range=[0, 110]
+                ),
+                showlegend=False,
+                margin=dict(l=0, r=0, t=30, b=0)
+            )
+            
+            # Add a dotted line marking the 80% threshold
+            fig_pareto.add_hline(y=80, yref="y2", line_dash="dot", annotation_text="80% Threshold", annotation_position="bottom right")
+            
+            st.plotly_chart(fig_pareto, key="pareto_chart", width="stretch")
+        else:
+            st.warning("⚠️ Cannot render Pareto chart: missing 'Sub-Category' and/or 'Sales' columns.")
+        # --- END PARETO CHART ---
+
     with tab2:
         adv_col1, adv_col2 = st.columns(2)
 
         with adv_col1:
-            # Replaced Profit Chart with Customer Segment Donut Chart
             st.subheader("Sales by Customer Segment")
             if 'Segment' in filtered_df.columns and 'Sales' in filtered_df.columns:
                 segment_sales = filtered_df.groupby("Segment")["Sales"].sum().reset_index()
@@ -173,7 +219,6 @@ if df is not None:
         with adv_col2:
             st.subheader("Geographical Sales Map")
             if 'State' in filtered_df.columns and 'Sales' in filtered_df.columns:
-                # OPTIMIZATION: Group by state to prevent browser lag
                 state_map_data = filtered_df.groupby("State")["Sales"].sum().reset_index()
                 fig_map = px.scatter_geo(
                     state_map_data, 
