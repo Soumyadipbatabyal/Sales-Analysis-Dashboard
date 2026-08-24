@@ -54,7 +54,47 @@ if df is not None:
         st.stop()
 
     # 4. Build the Top-Level KPIs
+    
+    # --- START OF MoM LOGIC ---
+    sales_delta, cust_delta, orders_delta, aov_delta = None, None, None, None
+
+    if "Order Date" in filtered_df.columns and not filtered_df.empty:
+        max_date = filtered_df["Order Date"].max()
+        
+        # Isolate Current Month Data
+        curr_mask = (filtered_df["Order Date"].dt.year == max_date.year) & (filtered_df["Order Date"].dt.month == max_date.month)
+        curr_df = filtered_df[curr_mask]
+        
+        # Isolate Previous Month Data (Handling Jan -> Dec rollover)
+        prev_year = max_date.year if max_date.month > 1 else max_date.year - 1
+        prev_month = max_date.month - 1 if max_date.month > 1 else 12
+        prev_mask = (filtered_df["Order Date"].dt.year == prev_year) & (filtered_df["Order Date"].dt.month == prev_month)
+        prev_df = filtered_df[prev_mask]
+        
+        # Safe delta calculator to prevent division by zero
+        def calc_delta(curr_val, prev_val):
+            if prev_val == 0:
+                return None
+            return f"{((curr_val - prev_val) / prev_val) * 100:.1f}%"
+
+        # Calculate metrics ONLY if we have a valid previous period to compare against
+        if not prev_df.empty:
+            if "Sales" in filtered_df.columns:
+                sales_delta = calc_delta(curr_df["Sales"].sum(), prev_df["Sales"].sum())
+            if "Customer ID" in filtered_df.columns:
+                cust_delta = calc_delta(curr_df["Customer ID"].nunique(), prev_df["Customer ID"].nunique())
+            if "Order ID" in filtered_df.columns:
+                prev_orders = prev_df["Order ID"].nunique()
+                curr_orders = curr_df["Order ID"].nunique()
+                orders_delta = calc_delta(curr_orders, prev_orders)
+                if "Sales" in filtered_df.columns and prev_orders > 0 and curr_orders > 0:
+                    aov_delta = calc_delta(curr_df["Sales"].sum() / curr_orders, prev_df["Sales"].sum() / prev_orders)
+            else:
+                orders_delta = calc_delta(len(curr_df), len(prev_df))
+    # --- END OF MoM LOGIC ---
+
     col1, col2, col3, col4 = st.columns(4)
+    
     if "Order ID" in filtered_df.columns:
         total_orders = filtered_df["Order ID"].nunique()
     else:
@@ -63,25 +103,28 @@ if df is not None:
     with col1:
         if "Sales" in filtered_df.columns:
             total_sales = filtered_df["Sales"].sum()
-            st.metric(label="Total Sales", value=f"${total_sales:,.2f}")
+            # Added delta parameter here
+            st.metric(label="Total Sales", value=f"${total_sales:,.2f}", delta=sales_delta)
         else:
             st.warning("⚠️ 'Sales' column missing.")
             
     with col2:
         if "Customer ID" in filtered_df.columns:
             total_customers = filtered_df["Customer ID"].nunique()
-            st.metric(label="Unique Customers", value=f"{total_customers:,}")
+            # Added delta parameter here
+            st.metric(label="Unique Customers", value=f"{total_customers:,}", delta=cust_delta)
         else:
             st.warning("⚠️ 'Customer ID' missing.")
             
     with col3:
-        st.metric(label="Total Orders", value=f"{total_orders:,}")
+        # Added delta parameter here
+        st.metric(label="Total Orders", value=f"{total_orders:,}", delta=orders_delta)
 
     with col4:
-        # Replaced Profit with Average Order Value (AOV)
         if "Sales" in filtered_df.columns and total_orders > 0:
             aov = filtered_df["Sales"].sum() / total_orders
-            st.metric(label="Average Order Value", value=f"${aov:,.2f}")
+            # Added delta parameter here
+            st.metric(label="Average Order Value", value=f"${aov:,.2f}", delta=aov_delta)
         else:
             st.warning("⚠️ Cannot calculate AOV.")
 
