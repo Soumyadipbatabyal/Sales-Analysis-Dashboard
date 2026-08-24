@@ -78,37 +78,12 @@ if df is not None:
         st.metric(label="Total Orders", value=f"{total_orders:,}")
 
     with col4:
+        # Replaced Profit with Average Order Value (AOV)
         if "Sales" in filtered_df.columns and total_orders > 0:
             aov = filtered_df["Sales"].sum() / total_orders
             st.metric(label="Average Order Value", value=f"${aov:,.2f}")
         else:
             st.warning("⚠️ Cannot calculate AOV.")
-
-    st.divider()
-
-    # 5. Build the Visualizations (100% Plotly)
-    chart_col1, chart_col2 = st.columns(2)
-
-    with chart_col1:
-        st.subheader("Monthly Sales Trend")
-        if 'Order Date' in filtered_df.columns and 'Sales' in filtered_df.columns:
-            monthly_sales = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M'))['Sales'].sum().reset_index()
-            monthly_sales['Order Date'] = monthly_sales['Order Date'].dt.to_timestamp()
-            fig_trend = px.line(monthly_sales, x='Order Date', y='Sales')
-            st.plotly_chart(fig_trend, key="trend_chart")
-        else:
-            st.warning("⚠️ Cannot render chart: missing 'Order Date' and/or 'Sales' columns.")
-
-    with chart_col2:
-        st.subheader("Sales by Sub-Category")
-        if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
-            # We sort ascending here so the biggest bar appears at the TOP of the horizontal chart
-            subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=True)
-            # Swap x and y, and add orientation='h'
-            fig_subcat = px.bar(subcategory_sales, x='Sales', y='Sub-Category', orientation='h')
-            st.plotly_chart(fig_subcat, key="subcat_chart")
-        else:
-            st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
     st.divider()
 
@@ -124,16 +99,18 @@ if df is not None:
                 monthly_sales = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M'))['Sales'].sum().reset_index()
                 monthly_sales['Order Date'] = monthly_sales['Order Date'].dt.to_timestamp()
                 fig_trend = px.line(monthly_sales, x='Order Date', y='Sales')
-                st.plotly_chart(fig_trend, key="trend_chart", use_container_width=True)
+                # Updated to modern width parameter
+                st.plotly_chart(fig_trend, key="trend_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Order Date' and/or 'Sales' columns.")
 
         with chart_col2:
             st.subheader("Sales by Sub-Category")
             if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                # Sorted ascending and flipped to horizontal bar chart
                 subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=True)
                 fig_subcat = px.bar(subcategory_sales, x='Sales', y='Sub-Category', orientation='h')
-                st.plotly_chart(fig_subcat, key="subcat_chart", use_container_width=True)
+                st.plotly_chart(fig_subcat, key="subcat_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
@@ -141,17 +118,19 @@ if df is not None:
         adv_col1, adv_col2 = st.columns(2)
 
         with adv_col1:
+            # Replaced Profit Chart with Customer Segment Donut Chart
             st.subheader("Sales by Customer Segment")
             if 'Segment' in filtered_df.columns and 'Sales' in filtered_df.columns:
                 segment_sales = filtered_df.groupby("Segment")["Sales"].sum().reset_index()
                 fig_segment = px.pie(segment_sales, values='Sales', names='Segment', hole=0.4)
-                st.plotly_chart(fig_segment, key="segment_chart", use_container_width=True)
+                st.plotly_chart(fig_segment, key="segment_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Segment' and/or 'Sales' columns.")
 
         with adv_col2:
             st.subheader("Geographical Sales Map")
             if 'State' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                # OPTIMIZATION: Group by state to prevent browser lag
                 state_map_data = filtered_df.groupby("State")["Sales"].sum().reset_index()
                 fig_map = px.scatter_geo(
                     state_map_data, 
@@ -161,14 +140,14 @@ if df is not None:
                     size="Sales",
                     scope="usa"
                 )
-                st.plotly_chart(fig_map, key="map_chart", use_container_width=True)
+                st.plotly_chart(fig_map, key="map_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'State' and/or 'Sales' columns.")
 
     with tab3:
         # 6. Raw Data & Export
         st.subheader("Raw Data View (First 100 Rows)")
-        st.dataframe(filtered_df.head(100), use_container_width=True)
+        st.dataframe(filtered_df.head(100), width="stretch")
 
         st.divider()
         st.subheader("Export Your Data")
