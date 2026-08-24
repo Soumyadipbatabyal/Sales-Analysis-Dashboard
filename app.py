@@ -111,43 +111,66 @@ if df is not None:
             st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
     st.divider()
-    
-    st.subheader("Advanced Insights")
-    adv_col1, adv_col2 = st.columns(2)
 
-    with adv_col1:
-        st.markdown("**Sales by Customer Segment**")
-        if 'Segment' in filtered_df.columns and 'Sales' in filtered_df.columns:
-            segment_sales = filtered_df.groupby("Segment")["Sales"].sum().reset_index()
-            # hole=0.4 turns the pie chart into a modern donut chart
-            fig_segment = px.pie(segment_sales, values='Sales', names='Segment', hole=0.4) 
-            st.plotly_chart(fig_segment, key="segment_chart")
-        else:
-            st.warning("⚠️ Cannot render chart: missing 'Segment' and/or 'Sales' columns.")
+    # 5. Dashboard Tabs
+    tab1, tab2, tab3 = st.tabs(["📈 Sales & Trends", "🌍 Geography & Customers", "📥 Data & Export"])
 
-    with adv_col2:
-        st.markdown("**Geographical Sales Map**")
-        if 'State' in filtered_df.columns and 'Sales' in filtered_df.columns:
-            # OPTIMIZATION: Group by state to prevent browser lag
-            state_map_data = filtered_df.groupby("State")["Sales"].sum().reset_index()
-            
-            fig_map = px.scatter_geo(
-                state_map_data, 
-                locations="State", 
-                locationmode="USA-states",
-                color="Sales",
-                size="Sales",
-                scope="usa"
-            )
-            st.plotly_chart(fig_map, key="map_chart")
-        else:
-            st.warning("⚠️ Cannot render chart: missing 'State' and/or 'Sales' columns.")
+    with tab1:
+        chart_col1, chart_col2 = st.columns(2)
+        
+        with chart_col1:
+            st.subheader("Monthly Sales Trend")
+            if 'Order Date' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                monthly_sales = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M'))['Sales'].sum().reset_index()
+                monthly_sales['Order Date'] = monthly_sales['Order Date'].dt.to_timestamp()
+                fig_trend = px.line(monthly_sales, x='Order Date', y='Sales')
+                st.plotly_chart(fig_trend, key="trend_chart", use_container_width=True)
+            else:
+                st.warning("⚠️ Cannot render chart: missing 'Order Date' and/or 'Sales' columns.")
 
-    # 6. Raw Data & Export
-    st.subheader("Raw Data View (First 100 Rows)")
-    st.dataframe(filtered_df.head(100))
+        with chart_col2:
+            st.subheader("Sales by Sub-Category")
+            if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=True)
+                fig_subcat = px.bar(subcategory_sales, x='Sales', y='Sub-Category', orientation='h')
+                st.plotly_chart(fig_subcat, key="subcat_chart", use_container_width=True)
+            else:
+                st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
-    st.divider()
-    st.subheader("Export Your Data")
-    csv_data = filtered_df.to_csv(index=False).encode('utf-8')
-    st.download_button(label="📥 Download Filtered Data as CSV", data=csv_data, file_name="filtered_superstore_data.csv", mime="text/csv")
+    with tab2:
+        adv_col1, adv_col2 = st.columns(2)
+
+        with adv_col1:
+            st.subheader("Sales by Customer Segment")
+            if 'Segment' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                segment_sales = filtered_df.groupby("Segment")["Sales"].sum().reset_index()
+                fig_segment = px.pie(segment_sales, values='Sales', names='Segment', hole=0.4)
+                st.plotly_chart(fig_segment, key="segment_chart", use_container_width=True)
+            else:
+                st.warning("⚠️ Cannot render chart: missing 'Segment' and/or 'Sales' columns.")
+
+        with adv_col2:
+            st.subheader("Geographical Sales Map")
+            if 'State' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                state_map_data = filtered_df.groupby("State")["Sales"].sum().reset_index()
+                fig_map = px.scatter_geo(
+                    state_map_data, 
+                    locations="State", 
+                    locationmode="USA-states",
+                    color="Sales",
+                    size="Sales",
+                    scope="usa"
+                )
+                st.plotly_chart(fig_map, key="map_chart", use_container_width=True)
+            else:
+                st.warning("⚠️ Cannot render chart: missing 'State' and/or 'Sales' columns.")
+
+    with tab3:
+        # 6. Raw Data & Export
+        st.subheader("Raw Data View (First 100 Rows)")
+        st.dataframe(filtered_df.head(100), use_container_width=True)
+
+        st.divider()
+        st.subheader("Export Your Data")
+        csv_data = filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Download Filtered Data as CSV", data=csv_data, file_name="filtered_superstore_data.csv", mime="text/csv")
