@@ -78,11 +78,11 @@ if df is not None:
         st.metric(label="Total Orders", value=f"{total_orders:,}")
 
     with col4:
-        if "Profit" in filtered_df.columns:
-            total_profit = filtered_df["Profit"].sum()
-            st.metric(label="Total Profit", value=f"${total_profit:,.2f}")
+        if "Sales" in filtered_df.columns and total_orders > 0:
+            aov = filtered_df["Sales"].sum() / total_orders
+            st.metric(label="Average Order Value", value=f"${aov:,.2f}")
         else:
-            st.warning("⚠️ 'Profit' column missing.")
+            st.warning("⚠️ Cannot calculate AOV.")
 
     st.divider()
 
@@ -102,8 +102,10 @@ if df is not None:
     with chart_col2:
         st.subheader("Sales by Sub-Category")
         if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
-            subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=False)
-            fig_subcat = px.bar(subcategory_sales, x='Sub-Category', y='Sales')
+            # We sort ascending here so the biggest bar appears at the TOP of the horizontal chart
+            subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=True)
+            # Swap x and y, and add orientation='h'
+            fig_subcat = px.bar(subcategory_sales, x='Sales', y='Sub-Category', orientation='h')
             st.plotly_chart(fig_subcat, key="subcat_chart")
         else:
             st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
@@ -114,13 +116,14 @@ if df is not None:
     adv_col1, adv_col2 = st.columns(2)
 
     with adv_col1:
-        st.markdown("**Profit by Sub-Category**")
-        if 'Sub-Category' in filtered_df.columns and 'Profit' in filtered_df.columns:
-            profit_by_sub = filtered_df.groupby("Sub-Category")["Profit"].sum().reset_index().sort_values(by="Profit", ascending=False)
-            fig_profit = px.bar(profit_by_sub, x='Sub-Category', y='Profit')
-            st.plotly_chart(fig_profit, key="profit_chart")
+        st.markdown("**Sales by Customer Segment**")
+        if 'Segment' in filtered_df.columns and 'Sales' in filtered_df.columns:
+            segment_sales = filtered_df.groupby("Segment")["Sales"].sum().reset_index()
+            # hole=0.4 turns the pie chart into a modern donut chart
+            fig_segment = px.pie(segment_sales, values='Sales', names='Segment', hole=0.4) 
+            st.plotly_chart(fig_segment, key="segment_chart")
         else:
-            st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Profit' columns.")
+            st.warning("⚠️ Cannot render chart: missing 'Segment' and/or 'Sales' columns.")
 
     with adv_col2:
         st.markdown("**Geographical Sales Map**")
