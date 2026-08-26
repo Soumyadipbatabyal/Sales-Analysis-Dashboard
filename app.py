@@ -146,16 +146,18 @@ if df is not None and not df.empty:
                 monthly_sales = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M'))['Sales'].sum().reset_index()
                 monthly_sales['Order Date'] = monthly_sales['Order Date'].dt.to_timestamp()
                 fig_trend = px.line(monthly_sales, x='Order Date', y='Sales')
-                st.plotly_chart(fig_trend, key="trend_chart_tab", use_container_width=True)
+                st.plotly_chart(fig_trend, key="trend_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Order Date' and/or 'Sales' columns.")
 
         with chart_col2:
             st.subheader("Sales by Sub-Category")
             if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                
+            
                 subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=True)
                 fig_subcat = px.bar(subcategory_sales, x='Sales', y='Sub-Category', orientation='h')
-                st.plotly_chart(fig_subcat, key="subcat_chart_tab", use_container_width=True)
+                st.plotly_chart(fig_subcat, key="subcat_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
@@ -200,7 +202,7 @@ if df is not None and not df.empty:
             
             fig_pareto.add_hline(y=80, yref="y2", line_dash="dot", annotation_text="80% Threshold", annotation_position="bottom right")
             
-            st.plotly_chart(fig_pareto, key="pareto_chart", use_container_width=True)
+            st.plotly_chart(fig_pareto, key="pareto_chart", width="stretch")
         else:
             st.warning("⚠️ Cannot render Pareto chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
@@ -212,7 +214,7 @@ if df is not None and not df.empty:
             if 'Segment' in filtered_df.columns and 'Sales' in filtered_df.columns:
                 segment_sales = filtered_df.groupby("Segment")["Sales"].sum().reset_index()
                 fig_segment = px.pie(segment_sales, values='Sales', names='Segment', hole=0.4)
-                st.plotly_chart(fig_segment, key="segment_chart_tab", use_container_width=True)
+                st.plotly_chart(fig_segment, key="segment_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Segment' and/or 'Sales' columns.")
 
@@ -244,7 +246,7 @@ if df is not None and not df.empty:
                     size="Sales",
                     scope="usa"
                 )
-                st.plotly_chart(fig_map, key="map_chart_tab", use_container_width=True)
+                st.plotly_chart(fig_map, key="map_chart_tab", width="stretch")
             else:
                 st.warning("⚠️ Cannot render chart: missing 'State' and/or 'Sales' columns.")
 
@@ -252,17 +254,17 @@ if df is not None and not df.empty:
         # 6. Filtered Data Summary
         st.subheader("Filtered Data Summary")
         
-        # FIX: Provide more width to the second column (1.5) so the date fits
-        stats_col1, stats_col2, stats_col3, stats_col4 = st.columns([1, 1.5, 1, 1])
+        # FIX 1: Give the date column even more space (ratio of 2 vs 1)
+        stats_col1, stats_col2, stats_col3, stats_col4 = st.columns([1, 2, 1, 1])
         
         total_filtered_rows = len(filtered_df)
         stats_col1.metric("Total Rows", f"{total_filtered_rows:,}")
         
         if 'Order Date' in filtered_df.columns and not filtered_df.empty:
-            min_date = filtered_df['Order Date'].min().strftime('%Y-%m-%d')
-            max_date = filtered_df['Order Date'].max().strftime('%Y-%m-%d')
-            # FIX: Use a shorter separator
-            date_range = f"{min_date} / {max_date}"
+            # FIX 2: Use shorter date format (MM/DD/YY) to prevent Streamlit truncation
+            min_date = filtered_df['Order Date'].min().strftime('%m/%d/%y')
+            max_date = filtered_df['Order Date'].max().strftime('%m/%d/%y')
+            date_range = f"{min_date} - {max_date}"
         else:
             date_range = "N/A"
         stats_col2.metric("Date Range", date_range)
@@ -293,7 +295,7 @@ if df is not None and not df.empty:
         else:
             preview_df = filtered_df[selected_cols].head(row_limit)
             st.markdown(f"**Showing {len(preview_df)} of {total_filtered_rows:,} rows**")
-            st.dataframe(preview_df, use_container_width=True)
+            st.dataframe(preview_df, width="stretch")
 
         st.divider()
         st.subheader("Export Your Data")
