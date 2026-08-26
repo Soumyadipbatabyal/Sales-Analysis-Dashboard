@@ -15,7 +15,7 @@ This project is a Sales Analysis Dashboard built using Python and Streamlit.
 - NumPy
 
 ## Dataset
-sales_data.csv
+superstore.csv (configurable via DATA_FILE environment variable)
 
 ## Run
 

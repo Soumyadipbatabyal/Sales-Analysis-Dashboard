@@ -12,22 +12,27 @@ st.markdown("This dashboard is reading directly from your downloaded Kaggle CSV 
 
 # 2. Load the Real Data
 @st.cache_data
-def load_data():
+def load_data(data_file):
     try:
-        data_file = os.environ.get("DATA_FILE", "superstore.csv")
         df = pd.read_csv(data_file, encoding="latin1")
         df.columns = df.columns.str.strip()
         if 'Order Date' in df.columns:
-            df['Order Date'] = pd.to_datetime(df['Order Date'], dayfirst=True)
+            df['Order Date'] = pd.to_datetime(df['Order Date'], dayfirst=True, errors='coerce')
+            df = df.dropna(subset=['Order Date'])
+        
+        if df.empty:
+            return None
+            
         return df
-    except FileNotFoundError:
-        st.error(f"⚠️ File not found! Please make sure your data file '{data_file}' exists.")
+    except Exception as e:
+        st.error(f"⚠️ Error loading file '{data_file}': {e}")
         return None
 
-df = load_data()
+data_file = os.environ.get("DATA_FILE", "superstore.csv")
+df = load_data(data_file)
 
 # Only run the dashboard if the data loaded successfully
-if df is not None:
+if df is not None and not df.empty:
     # 3. Create the Sidebar Filters
     st.sidebar.header("Dashboard Filters")
 
@@ -44,9 +49,9 @@ if df is not None:
         selected_categories = []
 
     filtered_df = df.copy()
-    if "Region" in df.columns and selected_regions:
+    if "Region" in df.columns:
         filtered_df = filtered_df[filtered_df["Region"].isin(selected_regions)]
-    if "Category" in df.columns and selected_categories:
+    if "Category" in df.columns:
         filtered_df = filtered_df[filtered_df["Category"].isin(selected_categories)]
 
     # Safety check: Stop the app if filters are empty to prevent errors
@@ -88,8 +93,10 @@ if df is not None:
                 prev_orders = prev_df["Order ID"].nunique()
                 curr_orders = curr_df["Order ID"].nunique()
                 orders_delta = calc_delta(curr_orders, prev_orders)
-                if "Sales" in filtered_df.columns and prev_orders > 0 and curr_orders > 0:
-                    aov_delta = calc_delta(curr_df["Sales"].sum() / curr_orders, prev_df["Sales"].sum() / prev_orders)
+                if "Sales" in filtered_df.columns and prev_orders > 0:
+                    curr_aov = curr_df["Sales"].sum() / curr_orders if curr_orders > 0 else 0
+                    prev_aov = prev_df["Sales"].sum() / prev_orders
+                    aov_delta = calc_delta(curr_aov, prev_aov)
             else:
                 orders_delta = calc_delta(len(curr_df), len(prev_df))
     # --- END OF MoM LOGIC ---
@@ -139,7 +146,7 @@ if df is not None:
                 monthly_sales = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M'))['Sales'].sum().reset_index()
                 monthly_sales['Order Date'] = monthly_sales['Order Date'].dt.to_timestamp()
                 fig_trend = px.line(monthly_sales, x='Order Date', y='Sales')
-                st.plotly_chart(fig_trend, key="trend_chart_tab", width="stretch")
+                st.plotly_chart(fig_trend, key="trend_chart_tab", use_container_width=True)
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Order Date' and/or 'Sales' columns.")
 
@@ -148,24 +155,21 @@ if df is not None:
             if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
                 subcategory_sales = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=True)
                 fig_subcat = px.bar(subcategory_sales, x='Sales', y='Sub-Category', orientation='h')
-                st.plotly_chart(fig_subcat, key="subcat_chart_tab", width="stretch")
+                st.plotly_chart(fig_subcat, key="subcat_chart_tab", use_container_width=True)
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Sub-Category' and/or 'Sales' columns.")
 
-        # --- NEW PARETO CHART ---
+        # --- PARETO CHART ---
         st.divider()
         st.subheader("Pareto Analysis: Sales by Sub-Category")
         st.markdown("Visualizing which products drive 80% of total revenue.")
         
         if 'Sub-Category' in filtered_df.columns and 'Sales' in filtered_df.columns:
-            # Calculate descending sales and cumulative percentage
             pareto_df = filtered_df.groupby("Sub-Category")["Sales"].sum().reset_index().sort_values(by="Sales", ascending=False)
             pareto_df["Cumulative %"] = (pareto_df["Sales"].cumsum() / pareto_df["Sales"].sum()) * 100
             
-            # Build the dual-axis chart
             fig_pareto = go.Figure()
             
-            # Bar chart for raw sales
             fig_pareto.add_trace(go.Bar(
                 x=pareto_df['Sub-Category'],
                 y=pareto_df['Sales'],
@@ -173,7 +177,6 @@ if df is not None:
                 marker_color='#3366CC'
             ))
             
-            # Line chart for cumulative percentage
             fig_pareto.add_trace(go.Scatter(
                 x=pareto_df['Sub-Category'],
                 y=pareto_df['Cumulative %'],
@@ -183,7 +186,6 @@ if df is not None:
                 line=dict(color='#FF9900', width=3)
             ))
             
-            # Format the dual-axis layout
             fig_pareto.update_layout(
                 yaxis=dict(title='Sales ($)'),
                 yaxis2=dict(
@@ -196,13 +198,11 @@ if df is not None:
                 margin=dict(l=0, r=0, t=30, b=0)
             )
             
-            # Add a dotted line marking the 80% threshold
             fig_pareto.add_hline(y=80, yref="y2", line_dash="dot", annotation_text="80% Threshold", annotation_position="bottom right")
             
-            st.plotly_chart(fig_pareto, key="pareto_chart", width="stretch")
+            st.plotly_chart(fig_pareto, key="pareto_chart", use_container_width=True)
         else:
             st.warning("⚠️ Cannot render Pareto chart: missing 'Sub-Category' and/or 'Sales' columns.")
-        # --- END PARETO CHART ---
 
     with tab2:
         adv_col1, adv_col2 = st.columns(2)
@@ -212,32 +212,95 @@ if df is not None:
             if 'Segment' in filtered_df.columns and 'Sales' in filtered_df.columns:
                 segment_sales = filtered_df.groupby("Segment")["Sales"].sum().reset_index()
                 fig_segment = px.pie(segment_sales, values='Sales', names='Segment', hole=0.4)
-                st.plotly_chart(fig_segment, key="segment_chart_tab", width="stretch")
+                st.plotly_chart(fig_segment, key="segment_chart_tab", use_container_width=True)
             else:
                 st.warning("⚠️ Cannot render chart: missing 'Segment' and/or 'Sales' columns.")
 
         with adv_col2:
             st.subheader("Geographical Sales Map")
             if 'State' in filtered_df.columns and 'Sales' in filtered_df.columns:
+                us_state_abbrev = {
+                    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
+                    'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
+                    'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
+                    'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+                    'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+                    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
+                    'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+                    'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+                    'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+                    'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+                    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+                    'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
+                    'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC'
+                }
                 state_map_data = filtered_df.groupby("State")["Sales"].sum().reset_index()
+                state_map_data['State Code'] = state_map_data['State'].map(us_state_abbrev).fillna(state_map_data['State'])
                 fig_map = px.scatter_geo(
                     state_map_data, 
-                    locations="State", 
+                    locations="State Code", 
                     locationmode="USA-states",
                     color="Sales",
                     size="Sales",
                     scope="usa"
                 )
-                st.plotly_chart(fig_map, key="map_chart_tab", width="stretch")
+                st.plotly_chart(fig_map, key="map_chart_tab", use_container_width=True)
             else:
                 st.warning("⚠️ Cannot render chart: missing 'State' and/or 'Sales' columns.")
 
     with tab3:
-        # 6. Raw Data & Export
-        st.subheader("Raw Data View (First 100 Rows)")
-        st.dataframe(filtered_df.head(100), width="stretch")
+        # 6. Filtered Data Summary
+        st.subheader("Filtered Data Summary")
+        
+        # FIX: Provide more width to the second column (1.5) so the date fits
+        stats_col1, stats_col2, stats_col3, stats_col4 = st.columns([1, 1.5, 1, 1])
+        
+        total_filtered_rows = len(filtered_df)
+        stats_col1.metric("Total Rows", f"{total_filtered_rows:,}")
+        
+        if 'Order Date' in filtered_df.columns and not filtered_df.empty:
+            min_date = filtered_df['Order Date'].min().strftime('%Y-%m-%d')
+            max_date = filtered_df['Order Date'].max().strftime('%Y-%m-%d')
+            # FIX: Use a shorter separator
+            date_range = f"{min_date} / {max_date}"
+        else:
+            date_range = "N/A"
+        stats_col2.metric("Date Range", date_range)
+        
+        unique_orders_tab = filtered_df['Order ID'].nunique() if 'Order ID' in filtered_df.columns else 0
+        stats_col3.metric("Unique Orders", f"{unique_orders_tab:,}")
+        
+        unique_cust_tab = filtered_df['Customer ID'].nunique() if 'Customer ID' in filtered_df.columns else 0
+        stats_col4.metric("Unique Customers", f"{unique_cust_tab:,}")
+
+        st.divider()
+
+        # 7. Dynamic Data Preview
+        st.subheader("Data Preview")
+        
+        ctrl_col1, ctrl_col2 = st.columns([1, 3])
+        with ctrl_col1:
+            default_limit = min(100, total_filtered_rows) if total_filtered_rows > 0 else 1
+            row_limit = st.number_input("Number of rows to preview", min_value=1, max_value=1000, value=default_limit, step=50)
+        with ctrl_col2:
+            available_cols = filtered_df.columns.tolist()
+            selected_cols = st.multiselect("Select columns to display", available_cols, default=available_cols)
+            
+        if not selected_cols:
+            st.warning("⚠️ Please select at least one column to preview.")
+        elif filtered_df.empty:
+            st.warning("⚠️ No data to preview.")
+        else:
+            preview_df = filtered_df[selected_cols].head(row_limit)
+            st.markdown(f"**Showing {len(preview_df)} of {total_filtered_rows:,} rows**")
+            st.dataframe(preview_df, use_container_width=True)
 
         st.divider()
         st.subheader("Export Your Data")
-        csv_data = filtered_df.to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Download Filtered Data as CSV", data=csv_data, file_name="filtered_superstore_data.csv", mime="text/csv")
+        csv_data = filtered_df[selected_cols].to_csv(index=False).encode('utf-8') if selected_cols else filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label=f"📥 Download {total_filtered_rows:,} Filtered Rows as CSV", 
+            data=csv_data, 
+            file_name="filtered_superstore_data.csv", 
+            mime="text/csv"
+        )
