@@ -1,0 +1,20 @@
+[project]
+name = "sales-analysis-dashboard"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "soumyadipbatabyal", email = "soumyadipbatabyal45@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.141.1",
+    "pandas",
+    "plotly>=6.9.0",
+    "scikit-learn>=1.9.0",
+    "streamlit>=1.62.0",
+    "uvicorn>=0.52.4",
+]
+
+[tool.uv]
+package = false
